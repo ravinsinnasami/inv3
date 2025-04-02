@@ -9,7 +9,7 @@ interface Wish {
   timestamp: string;
 }
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'http://localhost:3000/api';
 
 const GuestWishes: React.FC = () => {
   const [wishes, setWishes] = useState<Wish[]>([]);
@@ -99,37 +99,61 @@ const GuestWishes: React.FC = () => {
     }
   };
 
-  const handleDeleteWish = async (id: number) => {
-    try {
-      const response = await fetch(`${API_URL}/wishes/${id}`, {
-        method: 'DELETE',
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to delete wish');
-      }
-      
-      fetchWishes();
-    } catch (error) {
-      setError(`Failed to delete wish: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
+// Update the deleteWish function
+const deleteWish = async (id: number) => {
+  // Add confirmation dialog
+  const confirmDelete = window.confirm('Are you sure you want to delete this wish?');
+  if (!confirmDelete) return;
 
-  const handleResetWishes = async () => {
-    try {
-      const response = await fetch(`${API_URL}/wishes/reset`, {
-        method: 'DELETE',
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to reset wishes');
-      }
-      
-      fetchWishes();
-    } catch (error) {
-      setError(`Failed to reset wishes: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  try {
+    const response = await fetch(`http://localhost:3000/delete-wishes/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to delete wish');
     }
-  };
+
+    // Show success message
+    alert('Wish deleted successfully!');
+    
+    // Refresh the wishes after deletion
+    fetchWishes();
+  } catch (error) {
+    console.error('Error deleting wish:', error);
+    alert('Failed to delete wish. Please try again.');
+  }
+};
+
+// Update the resetWishes function
+const resetWishes = async () => {
+  const confirmReset = window.confirm('Are you sure you want to reset all wishes?');
+  if (!confirmReset) return;
+
+  try {
+    const response = await fetch('http://localhost:3000/reset-wishes', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include', // Important for CORS with credentials
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to reset wishes');
+    }
+
+    // Refresh the wishes after reset
+    fetchWishes();
+  } catch (error) {
+    console.error('Error resetting wishes:', error);
+    alert('Failed to reset wishes. Please try again.');
+  }
+};
 
   return (
     <div className="my-8 p-6 bg-white rounded-lg shadow-md">
@@ -153,8 +177,8 @@ const GuestWishes: React.FC = () => {
       
       <AdminControls 
         isAdmin={isAdmin}
-        onResetWishes={handleResetWishes}
-        onDeleteWish={handleDeleteWish}
+        onResetWishes={resetWishes}
+        onDeleteWish={deleteWish}
       />
       
       {/* Submit form */}
@@ -208,7 +232,7 @@ const GuestWishes: React.FC = () => {
                 </span>
                 {isAdmin && (
                   <button
-                    onClick={() => handleDeleteWish(wish.id)}
+                    onClick={() => deleteWish(wish.id)}
                     className="text-red-500 hover:text-red-700"
                   >
                     ✕

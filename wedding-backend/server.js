@@ -5,34 +5,38 @@ const cors = require('cors');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 // Enhanced CORS configuration
 app.use(cors({
-  origin: '*', // In production, replace with your specific domain
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 
 app.use(express.json());
 
 // Create and initialize SQLite database
-const db = new sqlite3.Database('./wishes.db', (err) => {
-  if (err) {
-    console.error('Error opening database', err.message);
-  } else {
-    console.log('Connected to the SQLite database');
-    // Create wishes table if it doesn't exist
-    db.run(`
-      CREATE TABLE IF NOT EXISTS wishes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        message TEXT NOT NULL,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+const db = new sqlite3.Database('./wishes.db', 
+  sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, 
+  (err) => {
+    if (err) {
+      console.error('Error opening database', err.message);
+    } else {
+      console.log('Connected to the SQLite database');
+      // Create wishes table if it doesn't exist
+      db.run(`
+        CREATE TABLE IF NOT EXISTS wishes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          message TEXT NOT NULL,
+          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    }
   }
-});
+);
 
 // Test endpoint
 app.get('/api/test', (req, res) => {
@@ -54,39 +58,26 @@ app.get('/api/wishes', (req, res) => {
   });
 });
 
-// Reset all wishes - You should protect this route in production!
-app.delete('/api/wishes/reset', (req, res) => {
-  console.log('DELETE /api/wishes/reset request received');
-  
-  db.run('DELETE FROM wishes', function(err) {
-    if (err) {
-      console.error('Database error:', err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    
-    console.log(`Deleted all wishes. Rows affected: ${this.changes}`);
-    res.json({ message: 'All wishes have been deleted', count: this.changes });
-  });
+// Update your delete and reset routes
+app.delete('/delete-wishes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.run('DELETE FROM wishes WHERE id = ?', [id]);
+    res.status(200).json({ message: 'Wish deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting wish:', error);
+    res.status(500).json({ error: 'Failed to delete wish' });
+  }
 });
 
-// Delete a specific wish by ID
-app.delete('/api/wishes/:id', (req, res) => {
-  const wishId = req.params.id;
-  console.log(`DELETE /api/wishes/${wishId} request received`);
-  
-  db.run('DELETE FROM wishes WHERE id = ?', [wishId], function(err) {
-    if (err) {
-      console.error('Database error:', err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Wish not found' });
-    }
-    
-    console.log(`Deleted wish with ID: ${wishId}`);
-    res.json({ message: `Wish ${wishId} has been deleted` });
-  });
+app.delete('/reset-wishes', async (req, res) => {
+  try {
+    await db.run('DELETE FROM wishes');
+    res.status(200).json({ message: 'Wishes reset successfully' });
+  } catch (error) {
+    console.error('Error resetting wishes:', error);
+    res.status(500).json({ error: 'Failed to reset wishes' });
+  }
 });
 
 
