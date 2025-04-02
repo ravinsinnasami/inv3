@@ -1,150 +1,248 @@
-import { useState, useEffect } from 'react';
-import './GuestWishes.css';
+// src/components/GuestWishes.tsx
+import React, { useState, useEffect } from 'react';
+import AdminControls from './AdminControls';
 
-const GuestWishes = () => {
-  const [wishes, setWishes] = useState<any[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [name, setName] = useState('');
-  const [message, setMessage] = useState('');
+interface Wish {
+  id: number;
+  name: string;
+  message: string;
+  timestamp: string;
+}
+
+const API_URL = 'http://localhost:3000/api';
+
+const GuestWishes: React.FC = () => {
+  const [wishes, setWishes] = useState<Wish[]>([]);
+  const [newWish, setNewWish] = useState({ name: '', message: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  // Fetch wishes on component mount
+  // Toggle admin mode with a keyboard shortcut (Ctrl+Shift+A)
   useEffect(() => {
-    fetchWishes();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'A') {
+        setIsAdmin(prev => !prev);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const fetchWishes = async () => {
+  useEffect(() => {
+    checkApiConnection();
+  }, []);
+
+  useEffect(() => {
+    if (apiStatus === 'connected') {
+      fetchWishes();
+    }
+  }, [apiStatus]);
+
+  const checkApiConnection = async () => {
     try {
-      const response = await fetch('http://localhost:3000/wishes');
-      if (!response.ok) throw new Error('Failed to fetch wishes');
-      const data = await response.json();
-      setWishes(data);
+      const response = await fetch(`${API_URL}/test`);
+      if (response.ok) {
+        setApiStatus('connected');
+      } else {
+        throw new Error('API not responding properly');
+      }
     } catch (error) {
-      console.error('Error fetching wishes:', error);
+      setApiStatus('error');
+      setError(`Cannot connect to server at ${API_URL}. Please check if the backend is running.`);
     }
   };
 
-  const submitWish = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || !message.trim()) return;
-  
-    setIsSubmitting(true);
-  
+  const fetchWishes = async () => {
     try {
-      const response = await fetch('http://localhost:3000/wishes', {
+      const response = await fetch(`${API_URL}/wishes`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch wishes: ${response.status} ${response.statusText}`);
+      }
+      const data = await response.json();
+      setWishes(data);
+    } catch (error) {
+      setError('Could not load wishes. Please try again later.');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newWish.name || !newWish.message) return;
+    
+    setIsSubmitting(true);
+    setError('');
+    
+    try {
+      const response = await fetch(`${API_URL}/wishes`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
-        body: JSON.stringify({ name, message }),
+        body: JSON.stringify(newWish),
       });
-  
-      // First check if response is HTML (error page)
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.indexOf('text/html') !== -1) {
-        const html = await response.text();
-        console.error('Server returned HTML:', html);
-        throw new Error('Server error - check console');
-      }
-  
-      // Then try to parse as JSON
-      const data = await response.json();
+      
+      const responseData = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to submit wish');
+        throw new Error(`Failed to submit wish: ${response.status} ${responseData.error || response.statusText}`);
       }
-  
-      setName('');
-      setMessage('');
-      setShowForm(false);
-      await fetchWishes();
       
+      setNewWish({ name: '', message: '' });
+      fetchWishes();
     } catch (error) {
-      console.error('Full error:', error);
-      alert(`Submission failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setError(`Failed to send your wish: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const deleteWish = async (id: number) => {
-    const confirmDelete = window.confirm('Are you sure you want to delete this wish?');
-    if (!confirmDelete) return;
+// Update the deleteWish function
+const deleteWish = async (id: number) => {
+  // Add confirmation dialog
+  const confirmDelete = window.confirm('Are you sure you want to delete this wish?');
+  if (!confirmDelete) return;
 
-    try {
-      await fetch(`http://localhost:3000/delete-wishes/${id}`, {
-        method: 'DELETE',
-      });
-      fetchWishes();
-    } catch (error) {
-      console.error('Error deleting wish:', error);
+  try {
+    const response = await fetch(`http://localhost:3000/delete-wishes/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to delete wish');
     }
-  };
+
+    // Show success message
+    alert('Wish deleted successfully!');
+    
+    // Refresh the wishes after deletion
+    fetchWishes();
+  } catch (error) {
+    console.error('Error deleting wish:', error);
+    alert('Failed to delete wish. Please try again.');
+  }
+};
+
+// Update the resetWishes function
+const resetWishes = async () => {
+  const confirmReset = window.confirm('Are you sure you want to reset all wishes?');
+  if (!confirmReset) return;
+
+  try {
+    const response = await fetch('http://localhost:3000/reset-wishes', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include', // Important for CORS with credentials
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to reset wishes');
+    }
+
+    // Refresh the wishes after reset
+    fetchWishes();
+  } catch (error) {
+    console.error('Error resetting wishes:', error);
+    alert('Failed to reset wishes. Please try again.');
+  }
+};
 
   return (
-    <div className="guest-wishes-container">
-      <h2>Guest Wishes</h2>
+    <div className="my-8 p-6 bg-white rounded-lg shadow-md">
+      <h2 className="text-2xl font-bold text-center mb-6">Guest Wishes</h2>
       
-      <button 
-        className="add-wish-button"
-        onClick={() => setShowForm(true)}
-      >
-        Leave Your Wish
-      </button>
-
-      {showForm && (
-        <div className="wish-form-overlay">
-          <div className="wish-form-container">
-            <button 
-              className="close-button"
-              onClick={() => setShowForm(false)}
-            >
-              ×
-            </button>
-            <h3>Leave Your Wish</h3>
-            <form onSubmit={submitWish}>
-              <input
-                type="text"
-                placeholder="Your Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-              <textarea
-                placeholder="Your Message"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                required
-              />
-              <button type="submit">Submit</button>
-            </form>
-          </div>
+      {apiStatus === 'error' && (
+        <div className="p-3 mb-4 bg-red-100 text-red-700 rounded-md">
+          {error}
+          <button 
+            onClick={checkApiConnection}
+            className="ml-2 px-2 py-1 bg-red-200 rounded-md hover:bg-red-300"
+          >
+            Retry
+          </button>
         </div>
       )}
-
-      <div className="wishes-list">
-        {wishes.length === 0 ? (
-          <div className="no-wishes">Wishes will appear here</div>
-        ) : (
-          wishes.map((wish) => (
-            <div key={wish.id} className="wish-card">
-              <div className="wish-header">
-                <h4>{wish.name}</h4>
-                <button 
-                  className="delete-button"
-                  onClick={() => deleteWish(wish.id)}
-                >
-                  ×
-                </button>
-              </div>
-              <p className="wish-message">{wish.message}</p>
-              <p className="wish-date">
-                {new Date(wish.timestamp).toLocaleString()}
-              </p>
-            </div>
-          ))
+      
+      {error && apiStatus !== 'error' && (
+        <div className="p-3 mb-4 bg-red-100 text-red-700 rounded-md">{error}</div>
+      )}
+      
+      <AdminControls 
+        isAdmin={isAdmin}
+        onResetWishes={resetWishes}
+        onDeleteWish={deleteWish}
+      />
+      
+      {/* Submit form */}
+      <form onSubmit={handleSubmit} className="mb-8">
+        <div className="mb-4">
+          <label htmlFor="name" className="block text-sm font-medium mb-1">Your Name</label>
+          <input
+            type="text"
+            id="name"
+            value={newWish.name}
+            onChange={(e) => setNewWish({...newWish, name: e.target.value})}
+            className="w-full px-3 py-2 border rounded-md"
+            required
+            disabled={apiStatus !== 'connected'}
+          />
+        </div>
+        <div className="mb-4">
+          <label htmlFor="message" className="block text-sm font-medium mb-1">Your Wishes</label>
+          <textarea
+            id="message"
+            value={newWish.message}
+            onChange={(e) => setNewWish({...newWish, message: e.target.value})}
+            className="w-full px-3 py-2 border rounded-md h-24"
+            required
+            disabled={apiStatus !== 'connected'}
+          />
+        </div>
+        <button 
+          type="submit" 
+          disabled={isSubmitting || apiStatus !== 'connected'}
+          className="w-full py-2 bg-pink-500 text-white rounded-md hover:bg-pink-600 disabled:bg-pink-300"
+        >
+          {isSubmitting ? 'Sending...' : 'Send Wishes'}
+        </button>
+      </form>
+      
+      {/* Wishes list */}
+      <div className="space-y-4">
+        <h3 className="text-xl font-semibold mb-2">Previous Wishes</h3>
+        {apiStatus === 'checking' && <p className="text-center">Connecting to server...</p>}
+        {apiStatus === 'connected' && wishes.length === 0 && (
+          <p className="text-center text-gray-500">Be the first to send your wishes!</p>
         )}
+        {apiStatus === 'connected' && wishes.map((wish) => (
+          <div key={wish.id} className="p-4 border rounded-md">
+            <div className="flex justify-between">
+              <h4 className="font-medium">{wish.name}</h4>
+              <div className="flex items-center">
+                <span className="text-sm text-gray-500 mr-2">
+                  {new Date(wish.timestamp).toLocaleDateString()}
+                </span>
+                {isAdmin && (
+                  <button
+                    onClick={() => deleteWish(wish.id)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+            <p className="mt-2">{wish.message}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
