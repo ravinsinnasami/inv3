@@ -9,7 +9,7 @@ interface Wish {
   timestamp: string;
 }
 
-const API_URL = 'http://localhost:3000/api';
+const API_URL = 'http://localhost:5000/api';
 
 const GuestWishes: React.FC = () => {
   const [wishes, setWishes] = useState<Wish[]>([]);
@@ -106,7 +106,7 @@ const deleteWish = async (id: number) => {
   if (!confirmDelete) return;
 
   try {
-    const response = await fetch(`http://localhost:3000/delete-wishes/${id}`, {
+    const response = await fetch(`http://localhost:5000/delete-wishes/${id}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
@@ -135,7 +135,7 @@ const resetWishes = async () => {
   if (!confirmReset) return;
 
   try {
-    const response = await fetch('http://localhost:3000/reset-wishes', {
+    const response = await fetch('http://localhost:5000/reset-wishes', {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
